@@ -96,7 +96,7 @@ module.exports = (plugin) => {
                     jwt: getService('jwt').issue({
                         id: user.id,
                     }),
-                    user: { ...await sanitizeUser(user, ctx), balance: account.balance },
+                    user: { ...await sanitizeUser(user, ctx), balance: account.balance, account: account.id },
 
                 });
             }
@@ -113,7 +113,7 @@ module.exports = (plugin) => {
 
                 ctx.send({
                     jwt: getService('jwt').issue({ id: user.id }),
-                    user: { ...await sanitizeUser(user, ctx), balance: account.balance },
+                    user: { ...await sanitizeUser(user, ctx), balance: account.balance, account: account.id },
                 });
 
             } catch (error) {
@@ -198,7 +198,7 @@ module.exports = (plugin) => {
                     throw new ApplicationError(err.message);
                 }
 
-                return ctx.send({ user: { ...sanitizedUser, balance: account.balance } });
+                return ctx.send({ user: { ...sanitizedUser, balance: account.balance, account: account.id } });
             }
 
             const jwt = getService('jwt').issue(_.pick(user, ['id']));
@@ -206,7 +206,7 @@ module.exports = (plugin) => {
 
             return ctx.send({
                 jwt,
-                user: { ...sanitizedUser, balance: account.balance },
+                user: { ...sanitizedUser, balance: account.balance, account: account.id },
             });
         } catch (err) {
             if (_.includes(err.message, 'username')) {

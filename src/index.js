@@ -33,11 +33,31 @@ module.exports = {
       }
     });
 
-    io.on('connection', function (socket) {
-
-
+    io.use(async (socket, next) => {
 
       
+      try {
+
+        //Socket Authentication
+        const result = await strapi.plugins[
+          'users-permissions'
+        ].services.jwt.verify(socket.handshake.query.token);
+        console.log(result);
+
+        next();
+      } catch (error) {
+        
+
+        console.log(error)
+      }
+
+
+
+    }).on('connection', function (socket) {
+
+
+
+
       if (interval) {
         clearInterval(interval);
       }
@@ -59,15 +79,6 @@ module.exports = {
           io.emit("loadBids", data);
 
 
-
-          
-          const account = await strapi.service('api::account.account').getUserAccount(1);
-
-          console.log(account);
-
-
-          
-      
         } catch (error) {
           console.log(error);
         }
@@ -80,10 +91,26 @@ module.exports = {
         let params = data;
         try {
 
-          console.log(params);
-          let data = await strapi.service('api::bid.bid').makeBid();
 
-          console.log(data);
+          let found = await strapi.entityService.findOne('api::product.product', params.product, { fields: "bid_price" });
+
+          const account = await strapi.service('api::account.account').getUserAccount(params.user);
+
+          //Check whether user has enough more to make the bid
+
+
+
+
+          if (parseInt(account.balance) >= parseInt(found.bid_price)) {
+            await strapi.service('api::bid.bid').makeBid({ ...params, account: account.id });
+            let product = await strapi.service('api::product.product').findAndUpdateBidPrice(found, params.bidValue);
+            let updatedProduct = await strapi.service('api::product.product').loadBids(product.id);
+            io.emit("loadBids", updatedProduct);
+          } else {
+            console.log("Balance Is low")
+          }
+
+
 
         } catch (error) {
           console.log(error);

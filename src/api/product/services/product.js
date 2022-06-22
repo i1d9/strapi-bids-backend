@@ -15,6 +15,7 @@ module.exports = createCoreService('api::product.product', ({ strapi }) => ({
             fields: "*",
             populate: {
                 bids: {
+                    limit: 5,
                     sort: 'createdAt:desc',
                     populate: {
                         account: {
@@ -35,6 +36,15 @@ module.exports = createCoreService('api::product.product', ({ strapi }) => ({
 
 
     },
+    async findAndUpdateBidPrice(found, price) {
+
+        
+        return strapi.entityService.update('api::product.product', found.id, {
+            data: {
+                bid_price: parseInt(found.bid_price) + parseInt(price)
+            },
+        });
+    }
 
 
 
