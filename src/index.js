@@ -42,8 +42,9 @@ module.exports = {
         const result = await strapi.plugins[
           'users-permissions'
         ].services.jwt.verify(socket.handshake.query.token);
-        console.log(result);
 
+        //Save the User ID to the socket connection
+        socket.user = result.id;
         next();
       } catch (error) {
         
@@ -94,7 +95,7 @@ module.exports = {
 
           let found = await strapi.entityService.findOne('api::product.product', params.product, { fields: "bid_price" });
 
-          const account = await strapi.service('api::account.account').getUserAccount(params.user);
+          const account = await strapi.service('api::account.account').getUserAccount(socket.user);
 
           //Check whether user has enough more to make the bid
 
