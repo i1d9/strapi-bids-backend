@@ -34,6 +34,10 @@ module.exports = {
     });
 
     io.on('connection', function (socket) {
+
+
+
+      
       if (interval) {
         clearInterval(interval);
       }
@@ -53,6 +57,17 @@ module.exports = {
 
           let data = await strapi.service('api::product.product').loadBids(params.id);
           io.emit("loadBids", data);
+
+
+
+          
+          const account = await strapi.service('api::account.account').getUserAccount(1);
+
+          console.log(account);
+
+
+          
+      
         } catch (error) {
           console.log(error);
         }
@@ -68,6 +83,7 @@ module.exports = {
           console.log(params);
           let data = await strapi.service('api::bid.bid').makeBid();
 
+          console.log(data);
 
         } catch (error) {
           console.log(error);

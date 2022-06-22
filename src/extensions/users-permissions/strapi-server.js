@@ -27,7 +27,8 @@ const sanitizeUser = (user, ctx) => {
 };
 module.exports = (plugin) => {
 
-    console.log(plugin.controllers.auth);
+
+
 
     plugin.controllers.auth.callback = async (ctx) => {
         const provider = ctx.params.provider || 'local';
@@ -88,12 +89,15 @@ module.exports = (plugin) => {
                 throw new ValidationError('Invalid identifier or password');
             } else {
 
-                console.log("Hayayayay ")
+
+                const account = await strapi.service('api::account.account').getUserAccount(user.id);
+
                 ctx.send({
                     jwt: getService('jwt').issue({
                         id: user.id,
                     }),
-                    user: await sanitizeUser(user, ctx),
+                    user: { ...await sanitizeUser(user, ctx), balance: account.balance },
+
                 });
             }
         } else {
@@ -104,10 +108,14 @@ module.exports = (plugin) => {
             // Connect the user with the third-party provider.
             try {
                 const user = await getService('providers').connect(provider, ctx.query);
+                //Import the account service to fetch account details
+                const account = await strapi.service('api::account.account').getUserAccount(user.id);
+
                 ctx.send({
                     jwt: getService('jwt').issue({ id: user.id }),
-                    user: await sanitizeUser(user, ctx),
+                    user: { ...await sanitizeUser(user, ctx), balance: account.balance },
                 });
+
             } catch (error) {
                 throw new ApplicationError(error.message);
             }
@@ -116,6 +124,101 @@ module.exports = (plugin) => {
 
 
 
+    plugin.controllers.auth.register = async (ctx) => {
+        const pluginStore = await strapi.store({ type: 'plugin', name: 'users-permissions' });
+
+        const settings = await pluginStore.get({
+            key: 'advanced',
+        });
+
+        if (!settings.allow_register) {
+            throw new ApplicationError('Register action is currently disabled');
+        }
+
+        const params = {
+            ..._.omit(ctx.request.body, ['confirmed', 'confirmationToken', 'resetPasswordToken']),
+            provider: 'local',
+        };
+
+        await validateRegisterBody(params);
+
+        // Throw an error if the password selected by the user
+        // contains more than three times the symbol '$'.
+        if (getService('user').isHashed(params.password)) {
+            throw new ValidationError(
+                'Your password cannot contain more than three times the symbol `$`'
+            );
+        }
+
+        const role = await strapi
+            .query('plugin::users-permissions.role')
+            .findOne({ where: { type: settings.default_role } });
+
+        if (!role) {
+            throw new ApplicationError('Impossible to find the default role');
+        }
+
+        // Check if the provided email is valid or not.
+        const isEmail = emailRegExp.test(params.email);
+
+        if (isEmail) {
+            params.email = params.email.toLowerCase();
+        } else {
+            throw new ValidationError('Please provide a valid email address');
+        }
+
+        params.role = role.id;
+
+        const user = await strapi.query('plugin::users-permissions.user').findOne({
+            where: { email: params.email },
+        });
+
+        if (user && user.provider === params.provider) {
+            throw new ApplicationError('Email is already taken');
+        }
+
+        if (user && user.provider !== params.provider && settings.unique_email) {
+            throw new ApplicationError('Email is already taken');
+        }
+
+        try {
+            if (!settings.email_confirmation) {
+                params.confirmed = true;
+            }
+
+            const user = await getService('user').add(params);
+            const account = await strapi.service('api::account.account').newUser(user.id);
+
+            const sanitizedUser = await sanitizeUser(user, ctx);
+
+            if (settings.email_confirmation) {
+                try {
+                    await getService('user').sendConfirmationEmail(sanitizedUser);
+                } catch (err) {
+                    throw new ApplicationError(err.message);
+                }
+
+                return ctx.send({ user: { ...sanitizedUser, balance: account.balance } });
+            }
+
+            const jwt = getService('jwt').issue(_.pick(user, ['id']));
+
+
+            return ctx.send({
+                jwt,
+                user: { ...sanitizedUser, balance: account.balance },
+            });
+        } catch (err) {
+            if (_.includes(err.message, 'username')) {
+                throw new ApplicationError('Username already taken');
+            } else if (_.includes(err.message, 'email')) {
+                throw new ApplicationError('Email already taken');
+            } else {
+                strapi.log.error(err);
+                throw new ApplicationError('An error occurred during account creation');
+            }
+        }
+    }
 
 
 
